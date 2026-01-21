@@ -106,6 +106,13 @@
 #define CEREAL_SAVE_MINIMAL_FUNCTION_NAME save_minimal
 #endif // CEREAL_SAVE_MINIMAL_FUNCTION_NAME
 
+#ifndef CEREAL_CLASS_VERSION_KEY
+//! The key name used to store class version information in archives
+/*! You can define @c CEREAL_CLASS_VERSION_KEY to be different assuming you do so
+    before this file is included. */
+#define CEREAL_CLASS_VERSION_KEY "cereal_class_version"
+#endif // CEREAL_CLASS_VERSION_KEY
+
 // ######################################################################
 //! Defines the CEREAL_NOEXCEPT macro to use instead of noexcept
 /*! If a compiler we support does not support noexcept, this macro

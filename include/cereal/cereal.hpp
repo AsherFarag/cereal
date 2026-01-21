@@ -602,7 +602,7 @@ namespace cereal
           detail::StaticObject<detail::Versions>::getInstance().find( hash, detail::Version<T>::version );
 
         if( insertResult.second ) // insertion took place, serialize the version number
-          process( make_nvp<ArchiveType>("cereal_class_version", version) );
+          process( make_nvp<ArchiveType>(CEREAL_CLASS_VERSION_KEY, version) );
 
         return version;
       }
@@ -1022,7 +1022,7 @@ namespace cereal
         {
           std::uint32_t version;
 
-          process( make_nvp<ArchiveType>("cereal_class_version", version) );
+          process( make_nvp<ArchiveType>(CEREAL_CLASS_VERSION_KEY, version) );
           itsVersionedTypes.emplace_hint( lookupResult, hash, version );
 
           return version;
