@@ -40,6 +40,14 @@ namespace cereal
   { RapidJSONException( const char * what_ ) : Exception( what_ ) {} };
 }
 
+// <Asher>
+namespace cereal
+{
+    template <class T>
+    struct bypass_prologue_epilogue : std::false_type {};
+}
+// </Asher>
+
 // Inform rapidjson that assert will throw
 #ifndef CEREAL_RAPIDJSON_ASSERT_THROWS
 #define CEREAL_RAPIDJSON_ASSERT_THROWS
@@ -844,22 +852,25 @@ namespace cereal
       that may be given data by the type about to be archived
 
       Minimal types do not start or finish nodes */
-  template <class T, traits::EnableIf<!std::is_arithmetic<T>::value,
-                                      !traits::has_minimal_base_class_serialization<T, traits::has_minimal_output_serialization, JSONOutputArchive>::value,
-                                      !traits::has_minimal_output_serialization<T, JSONOutputArchive>::value> = traits::sfinae>
-  inline void prologue( JSONOutputArchive & ar, T const & )
-  {
-    ar.startNode();
-  }
+template <class T, traits::EnableIf<!std::is_arithmetic<T>::value,
+                                    !traits::has_minimal_base_class_serialization<T, traits::has_minimal_output_serialization, JSONOutputArchive>::value,
+                                    !traits::has_minimal_output_serialization<T, JSONOutputArchive>::value,
+                                    /** <Asher> */ !bypass_prologue_epilogue<T>::value /** </Asher> */
+        > = traits::sfinae>
+inline void prologue( JSONOutputArchive & ar, T const & )
+{
+  ar.startNode();
+}
 
-  //! Prologue for all other types for JSON archives
-  template <class T, traits::EnableIf<!std::is_arithmetic<T>::value,
-                                      !traits::has_minimal_base_class_serialization<T, traits::has_minimal_input_serialization, JSONInputArchive>::value,
-                                      !traits::has_minimal_input_serialization<T, JSONInputArchive>::value> = traits::sfinae>
-  inline void prologue( JSONInputArchive & ar, T const & )
-  {
-    ar.startNode();
-  }
+template <class T, traits::EnableIf<!std::is_arithmetic<T>::value,
+                                    !traits::has_minimal_base_class_serialization<T, traits::has_minimal_input_serialization, JSONInputArchive>::value,
+                                    !traits::has_minimal_input_serialization<T, JSONInputArchive>::value,
+                                    /** <Asher> */ !bypass_prologue_epilogue<T>::value /** </Asher> */
+        > = traits::sfinae> 
+inline void prologue( JSONInputArchive & ar, T const & )
+{
+  ar.startNode();
+}
 
   // ######################################################################
   //! Epilogue for all other types other for JSON archives (except minimal types)
@@ -868,7 +879,9 @@ namespace cereal
       Minimal types do not start or finish nodes */
   template <class T, traits::EnableIf<!std::is_arithmetic<T>::value,
                                       !traits::has_minimal_base_class_serialization<T, traits::has_minimal_output_serialization, JSONOutputArchive>::value,
-                                      !traits::has_minimal_output_serialization<T, JSONOutputArchive>::value> = traits::sfinae>
+                                      !traits::has_minimal_output_serialization<T, JSONOutputArchive>::value,
+                                      /** <Asher> */ !bypass_prologue_epilogue<T>::value /** </Asher> */
+        > = traits::sfinae>
   inline void epilogue( JSONOutputArchive & ar, T const & )
   {
     ar.finishNode();
@@ -877,7 +890,9 @@ namespace cereal
   //! Epilogue for all other types other for JSON archives
   template <class T, traits::EnableIf<!std::is_arithmetic<T>::value,
                                       !traits::has_minimal_base_class_serialization<T, traits::has_minimal_input_serialization, JSONInputArchive>::value,
-                                      !traits::has_minimal_input_serialization<T, JSONInputArchive>::value> = traits::sfinae>
+                                      !traits::has_minimal_input_serialization<T, JSONInputArchive>::value,
+                                      /** <Asher> */ !bypass_prologue_epilogue<T>::value /** </Asher> */
+        > = traits::sfinae>
   inline void epilogue( JSONInputArchive & ar, T const & )
   {
     ar.finishNode();
