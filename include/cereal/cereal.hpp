@@ -182,7 +182,16 @@ namespace cereal
         by using the traits is_output_serializable and is_input_serializable
         in cereal/details/traits.hpp.
       @ingroup Internal */
-  enum Flags { AllowEmptyClassElision = 1 };
+  enum Flags
+  {
+      AllowEmptyClassElision = 1,
+
+      /** <Asher> */
+      // Useful if versioning is not needed for an archive type and will save a few bytes per object.
+      // This is not recommended for general use, but can be useful for certain archive types, such as network serialization.
+      DisableClassVersioning = 1 << 1
+      /** </Asher> */
+  };
 
   // ######################################################################
   //! Registers a specific Archive type with cereal
@@ -601,8 +610,13 @@ namespace cereal
         const auto version =
           detail::StaticObject<detail::Versions>::getInstance().find( hash, detail::Version<T>::version );
 
-        if( insertResult.second ) // insertion took place, serialize the version number
-          process( make_nvp<ArchiveType>(CEREAL_CLASS_VERSION_KEY, version) );
+        /** <Asher> */
+        if constexpr (!(Flags & DisableClassVersioning))
+        {
+        /** </Asher> */
+            if (insertResult.second) // insertion took place, serialize the version number
+                process( make_nvp<ArchiveType>( CEREAL_CLASS_VERSION_KEY, version ) );
+        }
 
         return version;
       }
@@ -1014,6 +1028,18 @@ namespace cereal
       std::uint32_t loadClassVersion()
       {
         static const auto hash = std::type_index(typeid(T)).hash_code();
+
+        /** <Asher> */
+        if constexpr (Flags & DisableClassVersioning)
+        {
+            // We can just return the current version of the class, since we are not serializing it
+            const auto lock = detail::StaticObject<detail::Versions>::lock();
+            const auto version =
+                detail::StaticObject<detail::Versions>::getInstance().find( hash, detail::Version<T>::version );
+            return version;
+        }
+        /** </Asher> */
+
         auto lookupResult = itsVersionedTypes.find( hash );
 
         if( lookupResult != itsVersionedTypes.end() ) // already exists
