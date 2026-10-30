@@ -111,7 +111,8 @@ namespace cereal
       that the container is variable sized and may be edited.
 
       \ingroup Archives */
-  class JSONOutputArchive : public OutputArchive<JSONOutputArchive>, public traits::TextArchive
+  /** <Asher> JSON never stores class versions: types always load with their current version. </Asher> */
+  class JSONOutputArchive : public OutputArchive<JSONOutputArchive, DisableClassVersioning>, public traits::TextArchive
   {
     enum class NodeType { StartObject, InObject, StartArray, InArray };
 
@@ -166,7 +167,7 @@ namespace cereal
           @param options The JSON specific options to use.  See the Options struct
                          for the values of default parameters */
       JSONOutputArchive(std::ostream & stream, Options const & options = Options::Default() ) :
-        OutputArchive<JSONOutputArchive>(this),
+        OutputArchive<JSONOutputArchive, DisableClassVersioning>(this),
         itsWriteStream(stream),
         itsWriter(itsWriteStream),
         itsNextName(nullptr)
@@ -433,7 +434,8 @@ namespace cereal
       @endcode
 
       \ingroup Archives */
-  class JSONInputArchive : public InputArchive<JSONInputArchive>, public traits::TextArchive
+  /** <Asher> JSON never stores class versions: types always load with their current version. </Asher> */
+  class JSONInputArchive : public InputArchive<JSONInputArchive, DisableClassVersioning>, public traits::TextArchive
   {
     private:
       using ReadStream = CEREAL_RAPIDJSON_NAMESPACE::IStreamWrapper;
@@ -450,7 +452,7 @@ namespace cereal
       //! Construct, reading from the provided stream
       /*! @param stream The stream to read from */
       JSONInputArchive(std::istream & stream) :
-        InputArchive<JSONInputArchive>(this),
+        InputArchive<JSONInputArchive, DisableClassVersioning>(this),
         itsNextName( nullptr ),
         itsReadStream(stream)
       {
