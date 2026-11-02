@@ -87,6 +87,14 @@ public:
         return *this;
     }
 
+    // <Asher>
+    //! Writes the next object or array, and everything in it, on one line: { "A": 1, "B": 2 } or [1, 2].
+    PrettyWriter& SetNextSingleLine() {
+        nextSingleLine_ = true;
+        return *this;
+    }
+    // </Asher>
+
     /*! @name Implementation of Handler
         \see Handler
     */
@@ -123,6 +131,7 @@ public:
     bool StartObject() {
         PrettyPrefix(kObjectType);
         new (Base::level_stack_.template Push<typename Base::Level>()) typename Base::Level(false);
+        BeginLevel();
         return Base::WriteStartObject();
     }
 
@@ -140,11 +149,17 @@ public:
         CEREAL_RAPIDJSON_ASSERT(!Base::level_stack_.template Top<typename Base::Level>()->inArray); // currently inside an Array, not Object
         CEREAL_RAPIDJSON_ASSERT(0 == Base::level_stack_.template Top<typename Base::Level>()->valueCount % 2); // Object has a Key without a Value
        
+        const bool singleLine = InSingleLine();
         bool empty = Base::level_stack_.template Pop<typename Base::Level>(1)->valueCount == 0;
+        EndLevel();
 
         if (!empty) {
-            Base::os_->Put('\n');
-            WriteIndent();
+            if (singleLine)
+                Base::os_->Put(' ');
+            else {
+                Base::os_->Put('\n');
+                WriteIndent();
+            }
         }
         bool ret = Base::EndValue(Base::WriteEndObject());
         (void)ret;
@@ -157,6 +172,7 @@ public:
     bool StartArray() {
         PrettyPrefix(kArrayType);
         new (Base::level_stack_.template Push<typename Base::Level>()) typename Base::Level(true);
+        BeginLevel();
         return Base::WriteStartArray();
     }
 
@@ -164,9 +180,11 @@ public:
         (void)memberCount;
         CEREAL_RAPIDJSON_ASSERT(Base::level_stack_.GetSize() >= sizeof(typename Base::Level));
         CEREAL_RAPIDJSON_ASSERT(Base::level_stack_.template Top<typename Base::Level>()->inArray);
+        const bool singleLine = InSingleLine();
         bool empty = Base::level_stack_.template Pop<typename Base::Level>(1)->valueCount == 0;
+        EndLevel();
 
-        if (!empty && !(formatOptions_ & kFormatSingleLineArray)) {
+        if (!empty && !singleLine && !(formatOptions_ & kFormatSingleLineArray)) {
             Base::os_->Put('\n');
             WriteIndent();
         }
@@ -210,7 +228,13 @@ protected:
         if (Base::level_stack_.GetSize() != 0) { // this value is not at root
             typename Base::Level* level = Base::level_stack_.template Top<typename Base::Level>();
 
-            if (level->inArray) {
+            if (InSingleLine()) { // <Asher>
+                if (level->valueCount > 0)
+                    Base::os_->Put(level->inArray || level->valueCount % 2 == 0 ? ',' : ':');
+                if (level->valueCount > 0 || !level->inArray)
+                    Base::os_->Put(' ');
+            } // </Asher>
+            else if (level->inArray) {
                 if (level->valueCount > 0) {
                     Base::os_->Put(','); // add comma if it is not the first element in array
                     if (formatOptions_ & kFormatSingleLineArray)
@@ -249,6 +273,24 @@ protected:
         }
     }
 
+    // <Asher>
+    size_t Depth() const { return Base::level_stack_.GetSize() / sizeof(typename Base::Level); }
+    bool InSingleLine() const { return singleLineDepth_ != 0 && Depth() >= singleLineDepth_; }
+
+    //! Called after a level is pushed: starts a single-line run if one was asked for.
+    void BeginLevel() {
+        if (nextSingleLine_ && singleLineDepth_ == 0)
+            singleLineDepth_ = Depth();
+        nextSingleLine_ = false;
+    }
+
+    //! Called after a level is popped: a single-line run ends with the level that started it.
+    void EndLevel() {
+        if (singleLineDepth_ != 0 && Depth() < singleLineDepth_)
+            singleLineDepth_ = 0;
+    }
+    // </Asher>
+
     void WriteIndent()  {
         size_t count = (Base::level_stack_.GetSize() / sizeof(typename Base::Level)) * indentCharCount_;
         PutN(*Base::os_, static_cast<typename OutputStream::Ch>(indentChar_), count);
@@ -257,6 +299,8 @@ protected:
     Ch indentChar_;
     unsigned indentCharCount_;
     PrettyFormatOptions formatOptions_;
+    size_t singleLineDepth_ = 0;  //!< <Asher> Depth of the level that started the current single-line run, 0 if none
+    bool nextSingleLine_ = false; //!< <Asher> Whether the next object or array starts a single-line run
 
 private:
     // Prohibit copy constructor & assignment operator.

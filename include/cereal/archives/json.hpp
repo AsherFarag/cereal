@@ -45,6 +45,10 @@ namespace cereal
 {
     template <class T>
     struct bypass_prologue_epilogue : std::false_type {};
+
+    //! Specialize as std::true_type to write every T on one line in JSON: { "A": 1, "B": 2 } or [1, 2].
+    template <class T>
+    struct json_inline : std::false_type {};
 }
 // </Asher>
 
@@ -176,6 +180,7 @@ namespace cereal
         itsWriter.SetIndent( options.itsIndentChar, options.itsIndentLength );
         itsNameCounter.push(0);
         itsNodeStack.push(NodeType::StartObject);
+        itsInlineStack.push(false);
       }
 
       //! Destructor, flushes the JSON
@@ -212,10 +217,20 @@ namespace cereal
           Nodes only need to be started for types that are themselves objects or arrays */
       void startNode()
       {
+        const bool isInline = itsNextInline; // <Asher> writeName clears it
         writeName();
         itsNodeStack.push(NodeType::StartObject);
         itsNameCounter.push(0);
+        itsInlineStack.push(isInline);
       }
+
+      // <Asher>
+      //! Writes the next node started with startNode, and everything in it, on one line
+      void setNextInline()
+      {
+        itsNextInline = true;
+      }
+      // </Asher>
 
       //! Designates the most recently added node as finished
       void finishNode()
@@ -228,12 +243,14 @@ namespace cereal
         switch(itsNodeStack.top())
         {
           case NodeType::StartArray:
+            startWriterNode();
             itsWriter.StartArray();
             // fall through
           case NodeType::InArray:
             itsWriter.EndArray();
             break;
           case NodeType::StartObject:
+            startWriterNode();
             itsWriter.StartObject();
             // fall through
           case NodeType::InObject:
@@ -243,6 +260,7 @@ namespace cereal
 
         itsNodeStack.pop();
         itsNameCounter.pop();
+        itsInlineStack.pop();
       }
 
       //! Sets the name for the next node created with startNode
@@ -351,17 +369,21 @@ namespace cereal
           */
       void writeName()
       {
+        itsNextInline = false; // <Asher> only a node can be inline
+
         NodeType const & nodeType = itsNodeStack.top();
 
         // Start up either an object or an array, depending on state
         if(nodeType == NodeType::StartArray)
         {
+          startWriterNode();
           itsWriter.StartArray();
           itsNodeStack.top() = NodeType::InArray;
         }
         else if(nodeType == NodeType::StartObject)
         {
           itsNodeStack.top() = NodeType::InObject;
+          startWriterNode();
           itsWriter.StartObject();
         }
 
@@ -389,11 +411,22 @@ namespace cereal
       //! @}
 
     private:
+      // <Asher>
+      //! Called right before the writer starts the current node's object or array
+      void startWriterNode()
+      {
+        if (itsInlineStack.top())
+          itsWriter.SetNextSingleLine();
+      }
+      // </Asher>
+
       WriteStream itsWriteStream;          //!< Rapidjson write stream
       JSONWriter itsWriter;                //!< Rapidjson writer
       char const * itsNextName;            //!< The next name
       std::stack<uint32_t> itsNameCounter; //!< Counter for creating unique names for unnamed nodes
       std::stack<NodeType> itsNodeStack;
+      std::stack<bool> itsInlineStack;     //!< <Asher> Whether each open node is written on one line
+      bool itsNextInline = false;          //!< <Asher> Whether the next node started is written on one line
   }; // JSONOutputArchive
 
   // ######################################################################
@@ -634,6 +667,16 @@ namespace cereal
         return itsIteratorStack.back().name();
       }
 
+      // <Asher>
+      //! Whether the next value to load (the one named by a pending NVP, if any) is a number
+      /*! @throws Exception if a pending NVP's name is not found, or there is no next value */
+      bool isNextNumber()
+      {
+        search();
+        return itsIteratorStack.back().value().IsNumber();
+      }
+      // </Asher>
+
       //! Sets the name for the next node created with startNode
       void setNextName( const char * name )
       {
@@ -861,6 +904,10 @@ template <class T, traits::EnableIf<!std::is_arithmetic<T>::value,
         > = traits::sfinae>
 inline void prologue( JSONOutputArchive & ar, T const & )
 {
+  /** <Asher> */
+  if (json_inline<T>::value)
+    ar.setNextInline();
+  /** </Asher> */
   ar.startNode();
 }
 
