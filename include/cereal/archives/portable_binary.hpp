@@ -75,7 +75,7 @@ namespace cereal
                <a href="www.github.com/USCiLab/cereal">the project github</a>.
 
     \ingroup Archives */
-  class PortableBinaryOutputArchive : public OutputArchive<PortableBinaryOutputArchive, AllowEmptyClassElision>
+  template <class Tag> class BasicPortableBinaryOutputArchive : public OutputArchive<BasicPortableBinaryOutputArchive<Tag>, AllowEmptyClassElision>
   {
     public:
       //! A class containing various advanced options for the PortableBinaryOutput archive
@@ -109,7 +109,7 @@ namespace cereal
           inline std::uint8_t is_little_endian() const
           { return itsOutputEndianness == Endianness::little; }
 
-          friend class PortableBinaryOutputArchive;
+          template <class> friend class BasicPortableBinaryOutputArchive;
           Endianness itsOutputEndianness;
       };
 
@@ -117,15 +117,15 @@ namespace cereal
       /*! @param stream The stream to output to. Should be opened with std::ios::binary flag.
           @param options The PortableBinary specific options to use.  See the Options struct
                          for the values of default parameters */
-      PortableBinaryOutputArchive(std::ostream & stream, Options const & options = Options::Default()) :
-        OutputArchive<PortableBinaryOutputArchive, AllowEmptyClassElision>(this),
+      BasicPortableBinaryOutputArchive(std::ostream & stream, Options const & options = Options::Default()) :
+        OutputArchive<BasicPortableBinaryOutputArchive<Tag>, AllowEmptyClassElision>(this),
         itsStream(stream),
         itsConvertEndianness( portable_binary_detail::is_little_endian() ^ options.is_little_endian() )
       {
         this->operator()( options.is_little_endian() );
       }
 
-      ~PortableBinaryOutputArchive() CEREAL_NOEXCEPT = default;
+      ~BasicPortableBinaryOutputArchive() CEREAL_NOEXCEPT = default;
 
       //! Writes size bytes of data to the output stream
       template <std::streamsize DataSize> inline
@@ -150,6 +150,9 @@ namespace cereal
       std::ostream & itsStream;
       const uint8_t itsConvertEndianness; //!< If set to true, we will need to swap bytes upon saving
   };
+
+  /** <Asher> An archive with no tag; tagged ones let a type tell, at compile time, what it is being serialized for. </Asher> */
+  using PortableBinaryOutputArchive = BasicPortableBinaryOutputArchive<void>;
 
   // ######################################################################
   //! An input archive designed to load data saved using PortableBinaryOutputArchive
@@ -177,7 +180,7 @@ namespace cereal
                <a href="www.github.com/USCiLab/cereal">the project github</a>.
 
     \ingroup Archives */
-  class PortableBinaryInputArchive : public InputArchive<PortableBinaryInputArchive, AllowEmptyClassElision>
+  template <class Tag> class BasicPortableBinaryInputArchive : public InputArchive<BasicPortableBinaryInputArchive<Tag>, AllowEmptyClassElision>
   {
     public:
       //! A class containing various advanced options for the PortableBinaryInput archive
@@ -211,7 +214,7 @@ namespace cereal
           inline std::uint8_t is_little_endian() const
           { return itsInputEndianness == Endianness::little; }
 
-          friend class PortableBinaryInputArchive;
+          template <class> friend class BasicPortableBinaryInputArchive;
           Endianness itsInputEndianness;
       };
 
@@ -219,8 +222,8 @@ namespace cereal
       /*! @param stream The stream to read from. Should be opened with std::ios::binary flag.
           @param options The PortableBinary specific options to use.  See the Options struct
                          for the values of default parameters */
-      PortableBinaryInputArchive(std::istream & stream, Options const & options = Options::Default()) :
-        InputArchive<PortableBinaryInputArchive, AllowEmptyClassElision>(this),
+      BasicPortableBinaryInputArchive(std::istream & stream, Options const & options = Options::Default()) :
+        InputArchive<BasicPortableBinaryInputArchive<Tag>, AllowEmptyClassElision>(this),
         itsStream(stream),
         itsConvertEndianness( false )
       {
@@ -229,7 +232,7 @@ namespace cereal
         itsConvertEndianness = options.is_little_endian() ^ streamLittleEndian;
       }
 
-      ~PortableBinaryInputArchive() CEREAL_NOEXCEPT = default;
+      ~BasicPortableBinaryInputArchive() CEREAL_NOEXCEPT = default;
 
       //! Reads size bytes of data from the input stream
       /*! @param data The data to save
@@ -258,13 +261,22 @@ namespace cereal
       uint8_t itsConvertEndianness; //!< If set to true, we will need to swap bytes upon loading
   };
 
+  using PortableBinaryInputArchive = BasicPortableBinaryInputArchive<void>;
+
+  namespace portable_binary_detail
+  {
+    template <class Archive> struct is_portable_binary : std::false_type {};
+    template <class Tag> struct is_portable_binary<BasicPortableBinaryOutputArchive<Tag>> : std::true_type {};
+    template <class Tag> struct is_portable_binary<BasicPortableBinaryInputArchive<Tag>> : std::true_type {};
+  }
+
   // ######################################################################
   // Common BinaryArchive serialization functions
 
   //! Saving for POD types to portable binary
-  template<class T> inline
+  template<class Tag, class T> inline
   typename std::enable_if<std::is_arithmetic<T>::value, void>::type
-  CEREAL_SAVE_FUNCTION_NAME(PortableBinaryOutputArchive & ar, T const & t)
+  CEREAL_SAVE_FUNCTION_NAME(BasicPortableBinaryOutputArchive<Tag> & ar, T const & t)
   {
     static_assert( !std::is_floating_point<T>::value ||
                    (std::is_floating_point<T>::value && std::numeric_limits<T>::is_iec559),
@@ -273,9 +285,9 @@ namespace cereal
   }
 
   //! Loading for POD types from portable binary
-  template<class T> inline
+  template<class Tag, class T> inline
   typename std::enable_if<std::is_arithmetic<T>::value, void>::type
-  CEREAL_LOAD_FUNCTION_NAME(PortableBinaryInputArchive & ar, T & t)
+  CEREAL_LOAD_FUNCTION_NAME(BasicPortableBinaryInputArchive<Tag> & ar, T & t)
   {
     static_assert( !std::is_floating_point<T>::value ||
                    (std::is_floating_point<T>::value && std::numeric_limits<T>::is_iec559),
@@ -285,7 +297,7 @@ namespace cereal
 
   //! Serializing NVP types to portable binary
   template <class Archive, class T> inline
-  CEREAL_ARCHIVE_RESTRICT(PortableBinaryInputArchive, PortableBinaryOutputArchive)
+  typename std::enable_if<portable_binary_detail::is_portable_binary<Archive>::value, void>::type
   CEREAL_SERIALIZE_FUNCTION_NAME( Archive & ar, NameValuePair<T> & t )
   {
     ar( t.value );
@@ -293,15 +305,15 @@ namespace cereal
 
   //! Serializing SizeTags to portable binary
   template <class Archive, class T> inline
-  CEREAL_ARCHIVE_RESTRICT(PortableBinaryInputArchive, PortableBinaryOutputArchive)
+  typename std::enable_if<portable_binary_detail::is_portable_binary<Archive>::value, void>::type
   CEREAL_SERIALIZE_FUNCTION_NAME( Archive & ar, SizeTag<T> & t )
   {
     ar( t.size );
   }
 
   //! Saving binary data to portable binary
-  template <class T> inline
-  void CEREAL_SAVE_FUNCTION_NAME(PortableBinaryOutputArchive & ar, BinaryData<T> const & bd)
+  template <class Tag, class T> inline
+  void CEREAL_SAVE_FUNCTION_NAME(BasicPortableBinaryOutputArchive<Tag> & ar, BinaryData<T> const & bd)
   {
     typedef typename std::remove_pointer<T>::type TT;
     static_assert( !std::is_floating_point<TT>::value ||
@@ -312,8 +324,8 @@ namespace cereal
   }
 
   //! Loading binary data from portable binary
-  template <class T> inline
-  void CEREAL_LOAD_FUNCTION_NAME(PortableBinaryInputArchive & ar, BinaryData<T> & bd)
+  template <class Tag, class T> inline
+  void CEREAL_LOAD_FUNCTION_NAME(BasicPortableBinaryInputArchive<Tag> & ar, BinaryData<T> & bd)
   {
     typedef typename std::remove_pointer<T>::type TT;
     static_assert( !std::is_floating_point<TT>::value ||
@@ -328,7 +340,12 @@ namespace cereal
 CEREAL_REGISTER_ARCHIVE(cereal::PortableBinaryOutputArchive)
 CEREAL_REGISTER_ARCHIVE(cereal::PortableBinaryInputArchive)
 
-// tie input and output archives together
-CEREAL_SETUP_ARCHIVE_TRAITS(cereal::PortableBinaryInputArchive, cereal::PortableBinaryOutputArchive)
+// tie input and output archives together, for every tag
+namespace cereal { namespace traits { namespace detail {
+  template <class Tag> struct get_output_from_input<BasicPortableBinaryInputArchive<Tag>>
+  { using type = BasicPortableBinaryOutputArchive<Tag>; };
+  template <class Tag> struct get_input_from_output<BasicPortableBinaryOutputArchive<Tag>>
+  { using type = BasicPortableBinaryInputArchive<Tag>; };
+} } } // namespace cereal::traits::detail
 
 #endif // CEREAL_ARCHIVES_PORTABLE_BINARY_HPP_

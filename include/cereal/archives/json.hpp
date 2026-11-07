@@ -116,7 +116,7 @@ namespace cereal
 
       \ingroup Archives */
   /** <Asher> JSON never stores class versions: types always load with their current version. </Asher> */
-  class JSONOutputArchive : public OutputArchive<JSONOutputArchive, DisableClassVersioning>, public traits::TextArchive
+  template <class Tag> class BasicJSONOutputArchive : public OutputArchive<BasicJSONOutputArchive<Tag>, DisableClassVersioning>, public traits::TextArchive
   {
     enum class NodeType { StartObject, InObject, StartArray, InArray };
 
@@ -160,7 +160,7 @@ namespace cereal
             itsIndentLength( indentLength ) { }
 
         private:
-          friend class JSONOutputArchive;
+          template <class> friend class BasicJSONOutputArchive;
           int itsPrecision;
           char itsIndentChar;
           unsigned int itsIndentLength;
@@ -170,8 +170,8 @@ namespace cereal
       /*! @param stream The stream to output to.
           @param options The JSON specific options to use.  See the Options struct
                          for the values of default parameters */
-      JSONOutputArchive(std::ostream & stream, Options const & options = Options::Default() ) :
-        OutputArchive<JSONOutputArchive, DisableClassVersioning>(this),
+      BasicJSONOutputArchive(std::ostream & stream, Options const & options = Options::Default() ) :
+        OutputArchive<BasicJSONOutputArchive<Tag>, DisableClassVersioning>(this),
         itsWriteStream(stream),
         itsWriter(itsWriteStream),
         itsNextName(nullptr)
@@ -184,7 +184,7 @@ namespace cereal
       }
 
       //! Destructor, flushes the JSON
-      ~JSONOutputArchive() CEREAL_NOEXCEPT
+      ~BasicJSONOutputArchive() CEREAL_NOEXCEPT
       {
         if (itsNodeStack.top() == NodeType::InObject)
           itsWriter.EndObject();
@@ -427,7 +427,10 @@ namespace cereal
       std::stack<NodeType> itsNodeStack;
       std::stack<bool> itsInlineStack;     //!< <Asher> Whether each open node is written on one line
       bool itsNextInline = false;          //!< <Asher> Whether the next node started is written on one line
-  }; // JSONOutputArchive
+  }; // BasicJSONOutputArchive
+
+  /** <Asher> An archive with no tag; tagged ones let a type tell, at compile time, what it is being serialized for. </Asher> */
+  using JSONOutputArchive = BasicJSONOutputArchive<void>;
 
   // ######################################################################
   //! An input archive designed to load data from JSON
@@ -468,7 +471,7 @@ namespace cereal
 
       \ingroup Archives */
   /** <Asher> JSON never stores class versions: types always load with their current version. </Asher> */
-  class JSONInputArchive : public InputArchive<JSONInputArchive, DisableClassVersioning>, public traits::TextArchive
+  template <class Tag> class BasicJSONInputArchive : public InputArchive<BasicJSONInputArchive<Tag>, DisableClassVersioning>, public traits::TextArchive
   {
     private:
       using ReadStream = CEREAL_RAPIDJSON_NAMESPACE::IStreamWrapper;
@@ -484,8 +487,8 @@ namespace cereal
 
       //! Construct, reading from the provided stream
       /*! @param stream The stream to read from */
-      JSONInputArchive(std::istream & stream) :
-        InputArchive<JSONInputArchive, DisableClassVersioning>(this),
+      BasicJSONInputArchive(std::istream & stream) :
+        InputArchive<BasicJSONInputArchive<Tag>, DisableClassVersioning>(this),
         itsNextName( nullptr ),
         itsReadStream(stream)
       {
@@ -496,7 +499,7 @@ namespace cereal
           itsIteratorStack.emplace_back(itsDocument.MemberBegin(), itsDocument.MemberEnd());
       }
 
-      ~JSONInputArchive() CEREAL_NOEXCEPT = default;
+      ~BasicJSONInputArchive() CEREAL_NOEXCEPT = default;
 
       //! Loads some binary data, encoded as a base64 string
       /*! This will automatically start and finish a node to load the data, and can be called directly by
@@ -808,7 +811,9 @@ namespace cereal
       ReadStream itsReadStream;               //!< Rapidjson write stream
       std::vector<Iterator> itsIteratorStack; //!< 'Stack' of rapidJSON iterators
       CEREAL_RAPIDJSON_NAMESPACE::Document itsDocument; //!< Rapidjson document
-  };
+  }; // BasicJSONInputArchive
+
+  using JSONInputArchive = BasicJSONInputArchive<void>;
 
   // ######################################################################
   // JSONArchive prologue and epilogue functions
@@ -817,78 +822,78 @@ namespace cereal
   // ######################################################################
   //! Prologue for NVPs for JSON archives
   /*! NVPs do not start or finish nodes - they just set up the names */
-  template <class T> inline
-  void prologue( JSONOutputArchive &, NameValuePair<T> const & )
+  template <class Tag, class T> inline
+  void prologue( BasicJSONOutputArchive<Tag> &, NameValuePair<T> const & )
   { }
 
   //! Prologue for NVPs for JSON archives
-  template <class T> inline
-  void prologue( JSONInputArchive &, NameValuePair<T> const & )
+  template <class Tag, class T> inline
+  void prologue( BasicJSONInputArchive<Tag> &, NameValuePair<T> const & )
   { }
 
   // ######################################################################
   //! Epilogue for NVPs for JSON archives
   /*! NVPs do not start or finish nodes - they just set up the names */
-  template <class T> inline
-  void epilogue( JSONOutputArchive &, NameValuePair<T> const & )
+  template <class Tag, class T> inline
+  void epilogue( BasicJSONOutputArchive<Tag> &, NameValuePair<T> const & )
   { }
 
   //! Epilogue for NVPs for JSON archives
   /*! NVPs do not start or finish nodes - they just set up the names */
-  template <class T> inline
-  void epilogue( JSONInputArchive &, NameValuePair<T> const & )
+  template <class Tag, class T> inline
+  void epilogue( BasicJSONInputArchive<Tag> &, NameValuePair<T> const & )
   { }
 
   // ######################################################################
   //! Prologue for deferred data for JSON archives
   /*! Do nothing for the defer wrapper */
-  template <class T> inline
-  void prologue( JSONOutputArchive &, DeferredData<T> const & )
+  template <class Tag, class T> inline
+  void prologue( BasicJSONOutputArchive<Tag> &, DeferredData<T> const & )
   { }
 
   //! Prologue for deferred data for JSON archives
-  template <class T> inline
-  void prologue( JSONInputArchive &, DeferredData<T> const & )
+  template <class Tag, class T> inline
+  void prologue( BasicJSONInputArchive<Tag> &, DeferredData<T> const & )
   { }
 
   // ######################################################################
   //! Epilogue for deferred for JSON archives
   /*! NVPs do not start or finish nodes - they just set up the names */
-  template <class T> inline
-  void epilogue( JSONOutputArchive &, DeferredData<T> const & )
+  template <class Tag, class T> inline
+  void epilogue( BasicJSONOutputArchive<Tag> &, DeferredData<T> const & )
   { }
 
   //! Epilogue for deferred for JSON archives
   /*! Do nothing for the defer wrapper */
-  template <class T> inline
-  void epilogue( JSONInputArchive &, DeferredData<T> const & )
+  template <class Tag, class T> inline
+  void epilogue( BasicJSONInputArchive<Tag> &, DeferredData<T> const & )
   { }
 
   // ######################################################################
   //! Prologue for SizeTags for JSON archives
   /*! SizeTags are strictly ignored for JSON, they just indicate
       that the current node should be made into an array */
-  template <class T> inline
-  void prologue( JSONOutputArchive & ar, SizeTag<T> const & )
+  template <class Tag, class T> inline
+  void prologue( BasicJSONOutputArchive<Tag> & ar, SizeTag<T> const & )
   {
     ar.makeArray();
   }
 
   //! Prologue for SizeTags for JSON archives
-  template <class T> inline
-  void prologue( JSONInputArchive &, SizeTag<T> const & )
+  template <class Tag, class T> inline
+  void prologue( BasicJSONInputArchive<Tag> &, SizeTag<T> const & )
   { }
 
   // ######################################################################
   //! Epilogue for SizeTags for JSON archives
   /*! SizeTags are strictly ignored for JSON */
-  template <class T> inline
-  void epilogue( JSONOutputArchive &, SizeTag<T> const & )
+  template <class Tag, class T> inline
+  void epilogue( BasicJSONOutputArchive<Tag> &, SizeTag<T> const & )
   { }
 
   //! Epilogue for SizeTags for JSON archives
-  template <class T> inline
-  void epilogue( JSONInputArchive &, SizeTag<T> const & )
+  template <class Tag, class T> inline
+  void epilogue( BasicJSONInputArchive<Tag> &, SizeTag<T> const & )
   { }
 
   // ######################################################################
@@ -897,12 +902,12 @@ namespace cereal
       that may be given data by the type about to be archived
 
       Minimal types do not start or finish nodes */
-template <class T, traits::EnableIf<!std::is_arithmetic<T>::value,
-                                    !traits::has_minimal_base_class_serialization<T, traits::has_minimal_output_serialization, JSONOutputArchive>::value,
-                                    !traits::has_minimal_output_serialization<T, JSONOutputArchive>::value,
+template <class Tag, class T, traits::EnableIf<!std::is_arithmetic<T>::value,
+                                    !traits::has_minimal_base_class_serialization<T, traits::has_minimal_output_serialization, BasicJSONOutputArchive<Tag>>::value,
+                                    !traits::has_minimal_output_serialization<T, BasicJSONOutputArchive<Tag>>::value,
                                     /** <Asher> */ !bypass_prologue_epilogue<T>::value /** </Asher> */
         > = traits::sfinae>
-inline void prologue( JSONOutputArchive & ar, T const & )
+inline void prologue( BasicJSONOutputArchive<Tag> & ar, T const & )
 {
   /** <Asher> */
   if (json_inline<T>::value)
@@ -911,12 +916,12 @@ inline void prologue( JSONOutputArchive & ar, T const & )
   ar.startNode();
 }
 
-template <class T, traits::EnableIf<!std::is_arithmetic<T>::value,
-                                    !traits::has_minimal_base_class_serialization<T, traits::has_minimal_input_serialization, JSONInputArchive>::value,
-                                    !traits::has_minimal_input_serialization<T, JSONInputArchive>::value,
+template <class Tag, class T, traits::EnableIf<!std::is_arithmetic<T>::value,
+                                    !traits::has_minimal_base_class_serialization<T, traits::has_minimal_input_serialization, BasicJSONInputArchive<Tag>>::value,
+                                    !traits::has_minimal_input_serialization<T, BasicJSONInputArchive<Tag>>::value,
                                     /** <Asher> */ !bypass_prologue_epilogue<T>::value /** </Asher> */
         > = traits::sfinae> 
-inline void prologue( JSONInputArchive & ar, T const & )
+inline void prologue( BasicJSONInputArchive<Tag> & ar, T const & )
 {
   ar.startNode();
 }
@@ -926,170 +931,170 @@ inline void prologue( JSONInputArchive & ar, T const & )
   /*! Finishes the node created in the prologue
 
       Minimal types do not start or finish nodes */
-  template <class T, traits::EnableIf<!std::is_arithmetic<T>::value,
-                                      !traits::has_minimal_base_class_serialization<T, traits::has_minimal_output_serialization, JSONOutputArchive>::value,
-                                      !traits::has_minimal_output_serialization<T, JSONOutputArchive>::value,
+  template <class Tag, class T, traits::EnableIf<!std::is_arithmetic<T>::value,
+                                      !traits::has_minimal_base_class_serialization<T, traits::has_minimal_output_serialization, BasicJSONOutputArchive<Tag>>::value,
+                                      !traits::has_minimal_output_serialization<T, BasicJSONOutputArchive<Tag>>::value,
                                       /** <Asher> */ !bypass_prologue_epilogue<T>::value /** </Asher> */
         > = traits::sfinae>
-  inline void epilogue( JSONOutputArchive & ar, T const & )
+  inline void epilogue( BasicJSONOutputArchive<Tag> & ar, T const & )
   {
     ar.finishNode();
   }
 
   //! Epilogue for all other types other for JSON archives
-  template <class T, traits::EnableIf<!std::is_arithmetic<T>::value,
-                                      !traits::has_minimal_base_class_serialization<T, traits::has_minimal_input_serialization, JSONInputArchive>::value,
-                                      !traits::has_minimal_input_serialization<T, JSONInputArchive>::value,
+  template <class Tag, class T, traits::EnableIf<!std::is_arithmetic<T>::value,
+                                      !traits::has_minimal_base_class_serialization<T, traits::has_minimal_input_serialization, BasicJSONInputArchive<Tag>>::value,
+                                      !traits::has_minimal_input_serialization<T, BasicJSONInputArchive<Tag>>::value,
                                       /** <Asher> */ !bypass_prologue_epilogue<T>::value /** </Asher> */
         > = traits::sfinae>
-  inline void epilogue( JSONInputArchive & ar, T const & )
+  inline void epilogue( BasicJSONInputArchive<Tag> & ar, T const & )
   {
     ar.finishNode();
   }
 
   // ######################################################################
   //! Prologue for arithmetic types for JSON archives
-  inline
-  void prologue( JSONOutputArchive & ar, std::nullptr_t const & )
+  template <class Tag> inline
+  void prologue( BasicJSONOutputArchive<Tag> & ar, std::nullptr_t const & )
   {
     ar.writeName();
   }
 
   //! Prologue for arithmetic types for JSON archives
-  inline
-  void prologue( JSONInputArchive &, std::nullptr_t const & )
+  template <class Tag> inline
+  void prologue( BasicJSONInputArchive<Tag> &, std::nullptr_t const & )
   { }
 
   // ######################################################################
   //! Epilogue for arithmetic types for JSON archives
-  inline
-  void epilogue( JSONOutputArchive &, std::nullptr_t const & )
+  template <class Tag> inline
+  void epilogue( BasicJSONOutputArchive<Tag> &, std::nullptr_t const & )
   { }
 
   //! Epilogue for arithmetic types for JSON archives
-  inline
-  void epilogue( JSONInputArchive &, std::nullptr_t const & )
+  template <class Tag> inline
+  void epilogue( BasicJSONInputArchive<Tag> &, std::nullptr_t const & )
   { }
 
   // ######################################################################
   //! Prologue for arithmetic types for JSON archives
-  template <class T, traits::EnableIf<std::is_arithmetic<T>::value> = traits::sfinae> inline
-  void prologue( JSONOutputArchive & ar, T const & )
+  template <class Tag, class T, traits::EnableIf<std::is_arithmetic<T>::value> = traits::sfinae> inline
+  void prologue( BasicJSONOutputArchive<Tag> & ar, T const & )
   {
     ar.writeName();
   }
 
   //! Prologue for arithmetic types for JSON archives
-  template <class T, traits::EnableIf<std::is_arithmetic<T>::value> = traits::sfinae> inline
-  void prologue( JSONInputArchive &, T const & )
+  template <class Tag, class T, traits::EnableIf<std::is_arithmetic<T>::value> = traits::sfinae> inline
+  void prologue( BasicJSONInputArchive<Tag> &, T const & )
   { }
 
   // ######################################################################
   //! Epilogue for arithmetic types for JSON archives
-  template <class T, traits::EnableIf<std::is_arithmetic<T>::value> = traits::sfinae> inline
-  void epilogue( JSONOutputArchive &, T const & )
+  template <class Tag, class T, traits::EnableIf<std::is_arithmetic<T>::value> = traits::sfinae> inline
+  void epilogue( BasicJSONOutputArchive<Tag> &, T const & )
   { }
 
   //! Epilogue for arithmetic types for JSON archives
-  template <class T, traits::EnableIf<std::is_arithmetic<T>::value> = traits::sfinae> inline
-  void epilogue( JSONInputArchive &, T const & )
+  template <class Tag, class T, traits::EnableIf<std::is_arithmetic<T>::value> = traits::sfinae> inline
+  void epilogue( BasicJSONInputArchive<Tag> &, T const & )
   { }
 
   // ######################################################################
   //! Prologue for strings for JSON archives
-  template<class CharT, class Traits, class Alloc> inline
-  void prologue(JSONOutputArchive & ar, std::basic_string<CharT, Traits, Alloc> const &)
+  template<class Tag, class CharT, class Traits, class Alloc> inline
+  void prologue(BasicJSONOutputArchive<Tag> & ar, std::basic_string<CharT, Traits, Alloc> const &)
   {
     ar.writeName();
   }
 
   //! Prologue for strings for JSON archives
-  template<class CharT, class Traits, class Alloc> inline
-  void prologue(JSONInputArchive &, std::basic_string<CharT, Traits, Alloc> const &)
+  template<class Tag, class CharT, class Traits, class Alloc> inline
+  void prologue(BasicJSONInputArchive<Tag> &, std::basic_string<CharT, Traits, Alloc> const &)
   { }
 
   // ######################################################################
   //! Epilogue for strings for JSON archives
-  template<class CharT, class Traits, class Alloc> inline
-  void epilogue(JSONOutputArchive &, std::basic_string<CharT, Traits, Alloc> const &)
+  template<class Tag, class CharT, class Traits, class Alloc> inline
+  void epilogue(BasicJSONOutputArchive<Tag> &, std::basic_string<CharT, Traits, Alloc> const &)
   { }
 
   //! Epilogue for strings for JSON archives
-  template<class CharT, class Traits, class Alloc> inline
-  void epilogue(JSONInputArchive &, std::basic_string<CharT, Traits, Alloc> const &)
+  template<class Tag, class CharT, class Traits, class Alloc> inline
+  void epilogue(BasicJSONInputArchive<Tag> &, std::basic_string<CharT, Traits, Alloc> const &)
   { }
 
   // ######################################################################
   // Common JSONArchive serialization functions
   // ######################################################################
   //! Serializing NVP types to JSON
-  template <class T> inline
-  void CEREAL_SAVE_FUNCTION_NAME( JSONOutputArchive & ar, NameValuePair<T> const & t )
+  template <class Tag, class T> inline
+  void CEREAL_SAVE_FUNCTION_NAME( BasicJSONOutputArchive<Tag> & ar, NameValuePair<T> const & t )
   {
     ar.setNextName( t.name );
     ar( t.value );
   }
 
-  template <class T> inline
-  void CEREAL_LOAD_FUNCTION_NAME( JSONInputArchive & ar, NameValuePair<T> & t )
+  template <class Tag, class T> inline
+  void CEREAL_LOAD_FUNCTION_NAME( BasicJSONInputArchive<Tag> & ar, NameValuePair<T> & t )
   {
     ar.setNextName( t.name );
     ar( t.value );
   }
 
   //! Saving for nullptr to JSON
-  inline
-  void CEREAL_SAVE_FUNCTION_NAME(JSONOutputArchive & ar, std::nullptr_t const & t)
+  template <class Tag> inline
+  void CEREAL_SAVE_FUNCTION_NAME(BasicJSONOutputArchive<Tag> & ar, std::nullptr_t const & t)
   {
     ar.saveValue( t );
   }
 
   //! Loading arithmetic from JSON
-  inline
-  void CEREAL_LOAD_FUNCTION_NAME(JSONInputArchive & ar, std::nullptr_t & t)
+  template <class Tag> inline
+  void CEREAL_LOAD_FUNCTION_NAME(BasicJSONInputArchive<Tag> & ar, std::nullptr_t & t)
   {
     ar.loadValue( t );
   }
 
   //! Saving for arithmetic to JSON
-  template <class T, traits::EnableIf<std::is_arithmetic<T>::value> = traits::sfinae> inline
-  void CEREAL_SAVE_FUNCTION_NAME(JSONOutputArchive & ar, T const & t)
+  template <class Tag, class T, traits::EnableIf<std::is_arithmetic<T>::value> = traits::sfinae> inline
+  void CEREAL_SAVE_FUNCTION_NAME(BasicJSONOutputArchive<Tag> & ar, T const & t)
   {
     ar.saveValue( t );
   }
 
   //! Loading arithmetic from JSON
-  template <class T, traits::EnableIf<std::is_arithmetic<T>::value> = traits::sfinae> inline
-  void CEREAL_LOAD_FUNCTION_NAME(JSONInputArchive & ar, T & t)
+  template <class Tag, class T, traits::EnableIf<std::is_arithmetic<T>::value> = traits::sfinae> inline
+  void CEREAL_LOAD_FUNCTION_NAME(BasicJSONInputArchive<Tag> & ar, T & t)
   {
     ar.loadValue( t );
   }
 
   //! saving string to JSON
-  template<class CharT, class Traits, class Alloc> inline
-  void CEREAL_SAVE_FUNCTION_NAME(JSONOutputArchive & ar, std::basic_string<CharT, Traits, Alloc> const & str)
+  template<class Tag, class CharT, class Traits, class Alloc> inline
+  void CEREAL_SAVE_FUNCTION_NAME(BasicJSONOutputArchive<Tag> & ar, std::basic_string<CharT, Traits, Alloc> const & str)
   {
     ar.saveValue( str );
   }
 
   //! loading string from JSON
-  template<class CharT, class Traits, class Alloc> inline
-  void CEREAL_LOAD_FUNCTION_NAME(JSONInputArchive & ar, std::basic_string<CharT, Traits, Alloc> & str)
+  template<class Tag, class CharT, class Traits, class Alloc> inline
+  void CEREAL_LOAD_FUNCTION_NAME(BasicJSONInputArchive<Tag> & ar, std::basic_string<CharT, Traits, Alloc> & str)
   {
     ar.loadValue( str );
   }
 
   // ######################################################################
   //! Saving SizeTags to JSON
-  template <class T> inline
-  void CEREAL_SAVE_FUNCTION_NAME( JSONOutputArchive &, SizeTag<T> const & )
+  template <class Tag, class T> inline
+  void CEREAL_SAVE_FUNCTION_NAME( BasicJSONOutputArchive<Tag> &, SizeTag<T> const & )
   {
     // nothing to do here, we don't explicitly save the size
   }
 
   //! Loading SizeTags from JSON
-  template <class T> inline
-  void CEREAL_LOAD_FUNCTION_NAME( JSONInputArchive & ar, SizeTag<T> & st )
+  template <class Tag, class T> inline
+  void CEREAL_LOAD_FUNCTION_NAME( BasicJSONInputArchive<Tag> & ar, SizeTag<T> & st )
   {
     ar.loadSize( st.size );
   }
@@ -1099,7 +1104,12 @@ inline void prologue( JSONInputArchive & ar, T const & )
 CEREAL_REGISTER_ARCHIVE(cereal::JSONInputArchive)
 CEREAL_REGISTER_ARCHIVE(cereal::JSONOutputArchive)
 
-// tie input and output archives together
-CEREAL_SETUP_ARCHIVE_TRAITS(cereal::JSONInputArchive, cereal::JSONOutputArchive)
+// tie input and output archives together, for every tag
+namespace cereal { namespace traits { namespace detail {
+  template <class Tag> struct get_output_from_input<BasicJSONInputArchive<Tag>>
+  { using type = BasicJSONOutputArchive<Tag>; };
+  template <class Tag> struct get_input_from_output<BasicJSONOutputArchive<Tag>>
+  { using type = BasicJSONInputArchive<Tag>; };
+} } } // namespace cereal::traits::detail
 
 #endif // CEREAL_ARCHIVES_JSON_HPP_
